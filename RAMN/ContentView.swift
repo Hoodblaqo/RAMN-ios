@@ -5,7 +5,12 @@ private struct RAMNBot: Identifiable, Hashable {
     let name: String
     let flags: Int
     var unavailable: Bool { flags & 5 != 0 }
-    var state: String { unavailable ? "Unavailable" : "Ready" }
+    var state: String {
+        if flags & 4 != 0 { return "Invalid Epic auth" }
+        if flags & 1 != 0 { return "Disabled" }
+        if flags & 2 != 0 { return "Public bot" }
+        return "Your FNLB bot"
+    }
 }
 private struct RAMNItem: Identifiable {
     let id: String
@@ -51,7 +56,9 @@ struct ContentView: View {
                 }
                 if !token.isEmpty { tabBar }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .preferredColorScheme(.dark)
         .onAppear { if !token.isEmpty { Task { await fetchBots() } } }
         .onChange(of: token) { value in
@@ -299,7 +306,7 @@ struct ContentView: View {
             tabButton("Locker", "square.grid.2x2.fill")
             tabButton("Chat", "bubble.left.and.bubble.right.fill")
             tabButton("Settings", "gearshape.fill")
-        }.padding(.top, 10).padding(.bottom, 7).background(.black.opacity(0.65))
+        }.padding(.top, 10).padding(.bottom, 7).frame(maxWidth: .infinity).background(.black.opacity(0.82).ignoresSafeArea(edges: .bottom))
     }
     private func tabButton(_ name: String, _ icon: String) -> some View {
         Button { tab = name } label: {
@@ -328,7 +335,17 @@ struct ContentView: View {
                 status = code == 401 || code == 403 ? "FNLB rejected this token or its permissions. Check the API token in FNLB." : "FNLB bot lookup failed: \(detail.prefix(180))"
                 bots = []; selectedBot = nil; return
             }
-            let decoded = try JSONDecoder().decode([RAMNBotDTO].self, from: data)
+            // FNLB documents GET /bots as an array; accept common data envelopes too.
+            let decoded: [RAMNBotDTO]
+            if let rows = try? JSONDecoder().decode([RAMNBotDTO].self, from: data) {
+                decoded = rows
+            } else if let envelope = try? JSONDecoder().decode(RAMNBotsEnvelope.self, from: data) {
+                decoded = envelope.data ?? envelope.bots ?? []
+            } else {
+                let body = String(data: data, encoding: .utf8) ?? "Unrecognized response"
+                status = "FNLB returned an unexpected bot-list format: " + String(body.prefix(220))
+                bots = []; selectedBot = nil; return
+            }
             bots = decoded.map { RAMNBot(id: $0.id, name: $0.nickname, flags: $0.flags) }
             if selectedBot == nil || !bots.contains(selectedBot!) { selectedBot = bots.first(where: { !$0.unavailable }) }
             status = bots.isEmpty ? "Connected, but this FNLB account has no bots." : "Connected · loaded \(bots.count) bot(s)."
@@ -423,6 +440,10 @@ private struct RAMNBotDTO: Decodable {
     let id: String
     let nickname: String
     let flags: Int
+}
+private struct RAMNBotsEnvelope: Decodable {
+    let data: [RAMNBotDTO]?
+    let bots: [RAMNBotDTO]?
 }
 private struct RAMNCommandDTO: Decodable {
     let content: String?
