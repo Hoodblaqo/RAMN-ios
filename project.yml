@@ -15,5 +15,6 @@ targets:
         PRODUCT_NAME: RAMN
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark
         INFOPLIST_KEY_CFBundleDisplayName: RAMN
